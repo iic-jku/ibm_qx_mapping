@@ -5,18 +5,19 @@
 #include <set>
 #include <climits>
 #include <fstream>
+#include <QASMparser.h>
+
+#define LOOK_AHEAD 0
+#define HEURISTIC_ADMISSIBLE 1
+#define USE_INITIAL_MAPPING 1
+#define MINIMAL_OUTPUT 1
+#define DUMP_MAPPED_CIRCUIT 0
 
 using namespace std;
 
 struct edge {
 	int v1;
 	int v2;
-};
-
-struct gate {
-	int target;
-	int control;
-	char type[4];
 };
 
 inline bool operator<(const edge& lhs, const edge& rhs) {
@@ -61,17 +62,17 @@ unsigned long ngates = 0;
 unsigned int nqubits = 0;
 
 std::set<edge> graph;
-vector<vector<gate> > layers;
+vector<vector<QASMparser::gate> > layers;
 priority_queue<node, std::vector<node>, node_cmp> nodes;
 
 
-//build a graph representing the coupling map of IBM QX3
-void build_graph_QX3() {
+//build a graph representing the coupling map of IBM QX5
+void build_graph_QX5() {
 	graph.clear();
 	positions = 16;
 	edge e;
-	e.v1 = 0;
-	e.v2 = 1;
+	e.v1 = 1;
+	e.v2 = 0;
 	graph.insert(e);
 	e.v1 = 1;
 	e.v2 = 2;
@@ -82,17 +83,20 @@ void build_graph_QX3() {
 	e.v1 = 3;
 	e.v2 = 14;
 	graph.insert(e);
-	e.v1 = 4;
-	e.v2 = 3;
+	e.v1 = 3;
+	e.v2 = 4;
 	graph.insert(e);
-	e.v1 = 4;
+	e.v1 = 5;
+	e.v2 = 4;
+	graph.insert(e);
+	e.v1 = 6;
 	e.v2 = 5;
 	graph.insert(e);
 	e.v1 = 6;
-	e.v2 = 7;
+	e.v2 = 11;
 	graph.insert(e);
 	e.v1 = 6;
-	e.v2 = 11;
+	e.v2 = 7;
 	graph.insert(e);
 	e.v1 = 7;
 	e.v2 = 10;
@@ -130,6 +134,9 @@ void build_graph_QX3() {
 	e.v1 = 15;
 	e.v2 = 14;
 	graph.insert(e);
+	e.v1 = 15;
+	e.v2 = 2;
+	graph.insert(e);
 }
 
 bool contains(vector<int> v, int e) {
@@ -149,7 +156,7 @@ int bfs(int start, int goal, std::set<edge>& graph) {
 	queue.push(v);
 	vector<vector<int> > solutions;
 
-	int length;
+	unsigned int length = 0;
 	std::set<int> successors;
 	while (!queue.empty()) {
 		v = queue.front();
@@ -162,7 +169,7 @@ int bfs(int start, int goal, std::set<edge>& graph) {
 		} else {
 			successors.clear();
 			for (set<edge>::iterator it = graph.begin(); it != graph.end();
-					it++) {
+				 it++) {
 				edge e = *it;
 				if (e.v1 == current && !contains(v, e.v2)) {
 					successors.insert(e.v2);
@@ -172,7 +179,7 @@ int bfs(int start, int goal, std::set<edge>& graph) {
 				}
 			}
 			for (set<int>::iterator it = successors.begin();
-					it != successors.end(); it++) {
+				 it != successors.end(); it++) {
 				vector<int> v2 = v;
 				v2.push_back(*it);
 				queue.push(v2);
@@ -186,15 +193,15 @@ int bfs(int start, int goal, std::set<edge>& graph) {
 		queue.pop();
 	}
 
-	for (int i = 0; i < solutions.size(); i++) {
+	for (unsigned int i = 0; i < solutions.size(); i++) {
 		vector<int> v = solutions[i];
-		for (int j = 0; j < v.size() - 1; j++) {
+
+		for (int j = 0; j < (int)v.size() - 1; j++) {
 			edge e;
 			e.v1 = v[j];
 			e.v2 = v[j + 1];
 			if (graph.find(e) != graph.end()) {
 				return (length-2)*7;
-				return length - 2;
 			}
 		}
 	}
@@ -220,85 +227,8 @@ void build_dist_table(std::set<edge>& graph) {
 	}
 }
 
-//A very simplified QASM parser
-void read_qasm(std::ifstream& infile) {
-	std::string line;
-
-	std::getline(infile, line);
-	if(line != "OPENQASM 2.0;") {
-		cerr << "ERROR: first line of the file has to be: OPENQASM 2.0;" << endl;
-		exit(1);
-	}
-
-	std::getline(infile, line);
-	if(line != "include \"qelib1.inc\";") {
-		cerr << "ERROR: second line of the file has to be: include \"qelib1.inc\"" << endl;
-		exit(1);
-	}
-
-	std::getline(infile, line);
-	int n = -1;
-	if (sscanf(line.c_str(), "qreg q[%d];", &n) != 1) {
-		cerr << "ERROR: failed to parse qasm file: " << line << endl;
-		exit(1);
-	}
-	if (n > positions) {
-		cerr << "ERROR: too many qubits for target architecture: " << n << endl;
-		exit(2);
-	}
-
-	std::getline(infile, line);
-
-	int* last_layer = new int[n];
-	for (int i = 0; i < n; i++) {
-		last_layer[i] = -1;
-	}
-
-	while (std::getline(infile, line)) {
-
-		if (line == "") {
-			continue;
-		}
-		gate g;
-		int layer;
-
-		int nq = sscanf(line.c_str(), "%3s q[%d],q[%d];", g.type, &g.control,
-				&g.target);
-
-		if (nq == 3) {
-			layer = max(last_layer[g.target], last_layer[g.control]) + 1;
-			last_layer[g.target] = last_layer[g.control] = layer;
-		} else if (nq == 2) {
-			g.target = g.control;
-			g.control = -1;
-			layer = last_layer[g.target] + 1;
-			last_layer[g.target] = layer;
-		} else {
-			double angle;
-			if(sscanf(line.c_str(), "rz(%f) q[%d];", &angle, &g.target) == 2) {
-				g.control = -1;
-				strcpy(g.type, "rz");
-				layer = last_layer[g.target] + 1;
-				last_layer[g.target] = layer;
-			} else {
-				cerr << "ERROR: could not read gate: " << line << endl;
-				exit(1);
-			}
-		}
-		ngates++;
-
-		if (layers.size() <= layer) {
-			layers.push_back(vector<gate>());
-		}
-		layers[layer].push_back(g);
-	}
-
-	nqubits = n;
-	delete[] last_layer;
-}
-
-void expand_node(const vector<int>& qubits, int qubit, edge *swaps, int nswaps,
-		int* used, node base_node, const vector<gate>& gates, int** dist, int next_layer) {
+void expand_node(const vector<int>& qubits, unsigned int qubit, edge *swaps, int nswaps,
+				 int* used, node base_node, const vector<QASMparser::gate>& gates, int** dist, int next_layer) {
 
 	if (qubit == qubits.size()) {
 		//base case: insert node into queue
@@ -316,7 +246,7 @@ void expand_node(const vector<int>& qubits, int qubit, edge *swaps, int nswaps,
 		new_node.swaps = vector<vector<edge> >();
 		new_node.nswaps = base_node.nswaps + nswaps;
 		for (vector<vector<edge> >::iterator it2 = base_node.swaps.begin();
-				it2 != base_node.swaps.end(); it2++) {
+			 it2 != base_node.swaps.end(); it2++) {
 			vector<edge> new_v(*it2);
 			new_node.swaps.push_back(new_v);
 		}
@@ -344,11 +274,15 @@ void expand_node(const vector<int>& qubits, int qubit, edge *swaps, int nswaps,
 		new_node.swaps.push_back(new_swaps);
 		new_node.done = 1;
 
-		for (vector<gate>::const_iterator it = gates.begin(); it != gates.end();
-				it++) {
-			gate g = *it;
+		for (vector<QASMparser::gate>::const_iterator it = gates.begin(); it != gates.end();
+			 it++) {
+			QASMparser::gate g = *it;
 			if (g.control != -1) {
+#if HEUR_ADMISSIBLE
+				new_node.cost_heur = max(new_node.cost_heur, dist[new_node.locations[g.control]][new_node.locations[g.target]]);
+#else
 				new_node.cost_heur = new_node.cost_heur + dist[new_node.locations[g.control]][new_node.locations[g.target]];
+#endif
 				if(dist[new_node.locations[g.control]][new_node.locations[g.target]] > 4) {
 					new_node.done = 0;
 				}
@@ -357,13 +291,14 @@ void expand_node(const vector<int>& qubits, int qubit, edge *swaps, int nswaps,
 
 		//Calculate heuristics for the cost of the following layer
 		new_node.cost_heur2 = 0;
+#if LOOK_AHEAD
 		if(next_layer != -1) {
 			for (vector<gate>::const_iterator it = layers[next_layer].begin(); it != layers[next_layer].end();
 							it++) {
 				gate g = *it;
 				if (g.control != -1) {
-					if(new_node.locations[g.control] == -1 && new_node.locations[g.target]) {
-					//ignore this case
+					if(new_node.locations[g.control] == -1 && new_node.locations[g.target] == -1) {
+						//No additional penalty in heuristics
 					} else if(new_node.locations[g.control] == -1) {
 						int min = 1000;
 						for(int i=0; i< positions; i++) {
@@ -381,28 +316,33 @@ void expand_node(const vector<int>& qubits, int qubit, edge *swaps, int nswaps,
 						}
 						new_node.cost_heur2 = new_node.cost_heur2 + min;
 					} else {
+#if HEURISTIC_ADMISSIBLE
+						new_node.cost_heur2 = max(new_node.cost_heur2, dist[new_node.locations[g.control]][new_node.locations[g.target]]);
+#else
 						new_node.cost_heur2 = new_node.cost_heur2 + dist[new_node.locations[g.control]][new_node.locations[g.target]];
+#endif
 					}
 				}
 			}
 		}
+#endif
 
 		nodes.push(new_node);
 	} else {
 		expand_node(qubits, qubit + 1, swaps, nswaps, used, base_node, gates,
-				dist, next_layer);
+					dist, next_layer);
 
 		for (set<edge>::iterator it = graph.begin(); it != graph.end(); it++) {
 			edge e = *it;
 			if (e.v1 == base_node.locations[qubits[qubit]]
-					|| e.v2 == base_node.locations[qubits[qubit]]) {
+				|| e.v2 == base_node.locations[qubits[qubit]]) {
 				if (!used[e.v1] && !used[e.v2]) {
 					used[e.v1] = 1;
 					used[e.v2] = 1;
 					swaps[nswaps].v1 = e.v1;
 					swaps[nswaps].v2 = e.v2;
 					expand_node(qubits, qubit + 1, swaps, nswaps + 1, used,
-							base_node, gates, dist, next_layer);
+								base_node, gates, dist, next_layer);
 					used[e.v1] = 0;
 					used[e.v2] = 0;
 				}
@@ -411,10 +351,10 @@ void expand_node(const vector<int>& qubits, int qubit, edge *swaps, int nswaps,
 	}
 }
 
-int getNextLayer(int layer) {
-	int next_layer = layer+1;
+unsigned int getNextLayer(unsigned int layer) {
+	unsigned int next_layer = layer+1;
 	while(next_layer < layers.size()) {
-		for(vector<gate>::iterator it = layers[next_layer].begin(); it != layers[next_layer].end(); it++) {
+		for(vector<QASMparser::gate>::iterator it = layers[next_layer].begin(); it != layers[next_layer].end(); it++) {
 			if(it->control != -1) {
 				return next_layer;
 			}
@@ -436,12 +376,12 @@ node a_star_fixlayer(int layer, int* map, int* loc, int** dist) {
 	n.swaps = vector<vector<edge> >();
 	n.done = 1;
 
-	vector<gate> v = vector<gate>(layers[layer]);
+	vector<QASMparser::gate> v = vector<QASMparser::gate>(layers[layer]);
 	vector<int> considered_qubits;
 
 	//Find a mapping for all logical qubits in the CNOTs of the layer that are not yet mapped
-	for (vector<gate>::iterator it = v.begin(); it != v.end(); it++) {
-		gate g = *it;
+	for (vector<QASMparser::gate>::iterator it = v.begin(); it != v.end(); it++) {
+		QASMparser::gate g = *it;
 		if (g.control != -1) {
 			considered_qubits.push_back(g.control);
 			considered_qubits.push_back(g.target);
@@ -459,7 +399,7 @@ node a_star_fixlayer(int layer, int* map, int* loc, int** dist) {
 					loc[g.target] = e.v2;
 					map[e.v2] = g.target;
 				} else {
-					cout << "no edge available!";
+					cerr << "no edge available!";
 					exit(1);
 				}
 			} else if(loc[g.control] == -1) {
@@ -487,6 +427,7 @@ node a_star_fixlayer(int layer, int* map, int* loc, int** dist) {
 			}
 			n.cost_heur = max(n.cost_heur, dist[loc[g.control]][loc[g.target]]);
 		} else {
+			//Nothing to do here
 		}
 	}
 
@@ -505,7 +446,7 @@ node a_star_fixlayer(int layer, int* map, int* loc, int** dist) {
 	}
 	edge *edges = new edge[considered_qubits.size()];
 
-	//Perform an A* search to find the cheapest permuation
+	//Perform an A* search to find the cheapest permutation
 	while (!nodes.top().done) {
 		node n = nodes.top();
 		nodes.pop();
@@ -533,59 +474,99 @@ node a_star_fixlayer(int layer, int* map, int* loc, int** dist) {
 
 int main(int argc, char** argv) {
 
+#if DUMP_MAPPED_CIRCUIT
 	if(argc != 3) {
-		cout << "Usage: ./imb_mapping <input_file> <output_file>" << endl;
-		exit(0);
+		cerr << "Usage: ./imb_mapping <input_file> <output_file>" << endl;
+		exit(1);
 	}
+#else
+	if(argc != 2) {
+		cerr << "Usage: ./imb_mapping <input_file>" << endl;
+		exit(1);
+	}
+#endif
 
-	build_graph_QX3();
+	build_graph_QX5();
 	build_dist_table(graph);
 
-	std::ifstream infile(argv[1]);
-	read_qasm(infile);
+	QASMparser* parser = new QASMparser(argv[1]);
+	parser->Parse();
+
+	layers = parser->getLayers();
+	nqubits = parser->getNqubits();
+	ngates = parser->getNgates();
+
+	delete parser;
 
 	unsigned int width = 0;
-	for (vector<vector<gate> >::iterator it = layers.begin(); it != layers.end(); it++) {
+	for (vector<vector<QASMparser::gate> >::iterator it = layers.begin(); it != layers.end(); it++) {
 		if ((*it).size() > width) {
 			width = (*it).size();
 		}
 	}
 
 	char* bName = basename(argv[1]);
+
+#if !MINIMAL_OUTPUT
 	cout << "Circuit name: " << bName << " (requires " << nqubits << " qubits)" << endl;
 
 	cout << endl << "Before mapping: " << endl;
 	cout << "  elementary gates: " << ngates << endl;
 	cout << "  depth: " << layers.size() << endl;
+#else
+	cout << bName << ',' << nqubits << ',' << ngates << ',' << layers.size() << flush;
+
+#endif
 
 	int *locations = new int[nqubits];
 	int *qubits = new int[positions];
-
-	for (int i = 0; i < positions; i++) {
-		qubits[i] = -1;
-	}
-	for(int i = 0; i < nqubits; i++) {
-		locations[i] = qubits[i] = i;
-	}
 
 	//Start mapping algorithm
 	clock_t begin_time = clock();
 
 	//Initially, no physical qubit is occupied
 	for (int i = 0; i < positions; i++) {
-			qubits[i] = -1;
+		qubits[i] = -1;
 	}
 
 	//Initially, no logical qubit is mapped to a physical one
-	for(int i = 0; i < nqubits; i++) {
+	for(unsigned i = 0; i < nqubits; i++) {
 		locations[i] = -1;
 	}
 
-	vector<gate> all_gates;
+#if USE_INITIAL_MAPPING
+	for (vector<QASMparser::gate>::iterator it = layers[0].begin(); it != layers[0].end(); it++) {
+		QASMparser::gate g = *it;
+		if (g.control != -1) {
+			for(set<edge>::iterator it = graph.begin(); it != graph.end(); it++) {
+				if(qubits[it->v1] == -1 && qubits[it->v2] == -1) {
+					qubits[it->v1] = g.control;
+					qubits[it->v2] = g.target;
+					locations[g.control] = it->v1;
+					locations[g.target] = it->v2;
+					break;
+				}
+			}
+		}
+	}
+	for(unsigned int i=0; i<nqubits; i++) {
+		if(locations[i] == -1) {
+			int j=0;
+			while(qubits[j]!=-1){
+				j++;
+			}
+			locations[i] = j;
+			qubits[j] = i;
+		}
+	}
+#endif
+
+
+	vector<QASMparser::gate> all_gates;
 	int total_swaps = 0;
 
 	//Fix the mapping of each layer
-	for (int i = 0; i < layers.size(); i++) {
+	for (unsigned int i = 0; i < layers.size(); i++) {
 		node result = a_star_fixlayer(i, qubits, locations, dist);
 
 		delete[] locations;
@@ -593,20 +574,20 @@ int main(int argc, char** argv) {
 		locations = result.locations;
 		qubits = result.qubits;
 
-		vector<gate> h_gates = vector<gate>();
+		vector<QASMparser::gate> h_gates = vector<QASMparser::gate>();
 
 		//The first layer does not require a permutation of the qubits
 		if (i != 0) {
 			//Add the required SWAPs to the circuits
 			for (vector<vector<edge> >::iterator it = result.swaps.begin();
-					it != result.swaps.end(); it++) {
+				 it != result.swaps.end(); it++) {
 				for (vector<edge>::iterator it2 = it->begin(); it2 != it->end();
-						it2++) {
+					 it2++) {
 
 					edge e = *it2;
-					gate cnot;
-					gate h1;
-					gate h2;
+					QASMparser::gate cnot;
+					QASMparser::gate h1;
+					QASMparser::gate h2;
 					if (graph.find(e) != graph.end()) {
 						cnot.control = e.v1;
 						cnot.target = e.v2;
@@ -622,14 +603,14 @@ int main(int argc, char** argv) {
 							exit(2);
 						}
 					}
-					strcpy(cnot.type, "cx");
-					strcpy(h1.type, "h");
-					strcpy(h2.type, "h");
+					strcpy(cnot.type, "CX");
+					strcpy(h1.type, "U(pi/2,0,pi)");
+					strcpy(h2.type, "U(pi/2,0,pi)");
 					h1.control = h2.control = -1;
 					h1.target = e.v1;
 					h2.target = e.v2;
 
-					gate gg;
+					QASMparser::gate gg;
 					gg.control = cnot.control;
 					gg.target = cnot.target;
 					strcpy(gg.type, "SWP");
@@ -649,15 +630,15 @@ int main(int argc, char** argv) {
 		}
 
 		//Add all gates of the layer to the circuit
-		vector<gate> layer_vec = layers[i];
-		for (vector<gate>::iterator it = layer_vec.begin();
-				it != layer_vec.end(); it++) {
-			gate g = *it;
+		vector<QASMparser::gate> layer_vec = layers[i];
+		for (vector<QASMparser::gate>::iterator it = layer_vec.begin();
+			 it != layer_vec.end(); it++) {
+			QASMparser::gate g = *it;
 			if (g.control == -1) {
 				//single qubit gate
 				if(locations[g.target] == -1) {
 					//handle the case that the qubit is not yet mapped. This happens if the qubit has not yet occurred in a CNOT gate
-					gate g2 = g;
+					QASMparser::gate g2 = g;
 					g2.target = -g.target -1;
 					all_gates.push_back(g2);
 				} else {
@@ -680,12 +661,12 @@ int main(int argc, char** argv) {
 					e.v2 = g.control;
 					if (graph.find(e) == graph.end()) {
 						cerr << "ERROR: invalid CNOT: " << e.v1 << " - " << e.v2
-								<< endl;
+							 << endl;
 						exit(3);
 					}
-					gate h;
+					QASMparser::gate h;
 					h.control = -1;
-					strcpy(h.type, "h");
+					strcpy(h.type, "U(pi/2,0,pi)");
 					h.target = g.target;
 					all_gates.push_back(h);
 
@@ -707,8 +688,8 @@ int main(int argc, char** argv) {
 				exit(2);
 			}
 
-			for (vector<gate>::iterator it = h_gates.begin();
-					it != h_gates.end(); it++) {
+			for (vector<QASMparser::gate>::iterator it = h_gates.begin();
+				 it != h_gates.end(); it++) {
 				all_gates.push_back(*it);
 			}
 		}
@@ -716,7 +697,7 @@ int main(int argc, char** argv) {
 	}
 
 	//Fix the position of the single qubit gates
-	for(vector<gate>::reverse_iterator it = all_gates.rbegin(); it != all_gates.rend(); it++) {
+	for(vector<QASMparser::gate>::reverse_iterator it = all_gates.rbegin(); it != all_gates.rend(); it++) {
 		if(strcmp(it->type, "SWP") == 0) {
 			int tmp_qubit1 = qubits[it->control];
 			int tmp_qubit2 = qubits[it->target];
@@ -750,29 +731,29 @@ int main(int argc, char** argv) {
 		last_layer[i] = -1;
 	}
 
-	vector<vector<gate> > mapped_circuit;
+	vector<vector<QASMparser::gate> > mapped_circuit;
 
 
 	//build resulting circuit
-	for(vector<gate>::iterator it = all_gates.begin(); it != all_gates.end(); it++) {
+	for(vector<QASMparser::gate>::iterator it = all_gates.begin(); it != all_gates.end(); it++) {
 		if(strcmp(it->type, "SWP") == 0) {
 			continue;
 		}
 		if(it->control == -1) {
 			//single qubit gate
-			gate g = *it;
-			int layer = last_layer[g.target] + 1;
+			QASMparser::gate g = *it;
+			unsigned int layer = last_layer[g.target] + 1;
 
 			if (mapped_circuit.size() <= layer) {
-				mapped_circuit.push_back(vector<gate>());
+				mapped_circuit.push_back(vector<QASMparser::gate>());
 			}
 			mapped_circuit[layer].push_back(g);
 			last_layer[g.target] = layer;
 		} else {
-			gate g = *it;
-			int layer = max(last_layer[g.control], last_layer[g.target]) + 1;
+			QASMparser::gate g = *it;
+			unsigned int layer = max(last_layer[g.control], last_layer[g.target]) + 1;
 			if (mapped_circuit.size() <= layer) {
-				mapped_circuit.push_back(vector<gate>());
+				mapped_circuit.push_back(vector<QASMparser::gate>());
 			}
 			mapped_circuit[layer].push_back(g);
 
@@ -783,20 +764,24 @@ int main(int argc, char** argv) {
 
 	double time = double(clock() - begin_time) / CLOCKS_PER_SEC;
 
+#if !MINIMAL_OUTPUT
 	cout << endl << "After mapping (no post mapping optimizations are conducted): " << endl;
 	cout << "  elementary gates: " << all_gates.size()-total_swaps << endl;
 	cout << "  depth: " << mapped_circuit.size() << endl;
 
 	cout << endl << "The mapping required " << time << " seconds" << endl;
 
-	cout << endl << "Initial mapping of the logical qubits (q) to the physical qubits (Q) of the IBM QX3 architecture: " << endl;
+	cout << endl << "Initial mapping of the logical qubits (q) to the physical qubits (Q) of the IBM QX5 architecture: " << endl;
 
 	for(int i=0; i<nqubits; i++) {
 		cout << "  q" << i << " is initially mapped to Q" << locations[i] << endl;
 	}
+#else
+	cout << ',' << time << ',' << (all_gates.size()-total_swaps) << ',' << mapped_circuit.size() << endl;
+#endif
 
+#if DUMP_MAPPED_CIRCUIT
 	//Dump resulting circuit
-
 	ofstream of(argv[2]);
 
 	of << "OPENQASM 2.0;" << endl;
@@ -804,10 +789,10 @@ int main(int argc, char** argv) {
 	of << "qreg q[16];" << endl;
 	of << "creg c[16];" << endl;
 
-	for (vector<vector<gate> >::iterator it = mapped_circuit.begin();
+	for (vector<vector<QASMparser::gate> >::iterator it = mapped_circuit.begin();
 			it != mapped_circuit.end(); it++) {
-		vector<gate> v = *it;
-		for (vector<gate>::iterator it2 = v.begin(); it2 != v.end(); it2++) {
+		vector<QASMparser::gate> v = *it;
+		for (vector<QASMparser::gate>::iterator it2 = v.begin(); it2 != v.end(); it2++) {
 			of << it2->type << " ";
 			if (it2->control != -1) {
 				of << "q[" << it2->control << "],";
@@ -815,6 +800,7 @@ int main(int argc, char** argv) {
 			of << "q[" << it2->target << "];" << endl;
 		}
 	}
+#endif
 
 	delete[] locations;
 	delete[] qubits;
