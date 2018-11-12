@@ -6,6 +6,7 @@
 #include <climits>
 #include <fstream>
 #include <QASMparser.h>
+#include "unique_priority_queue.h"
 
 #define LOOK_AHEAD 0
 #define HEURISTIC_ADMISSIBLE 1
@@ -14,6 +15,11 @@
 #define DUMP_MAPPED_CIRCUIT 0
 
 using namespace std;
+
+int** dist;
+int positions;
+unsigned long ngates = 0;
+unsigned int nqubits = 0;
 
 struct edge {
 	int v1;
@@ -39,8 +45,21 @@ struct node {
 	vector<vector<edge> > swaps;
 };
 
-struct node_cmp {
-	bool operator()(node& x, node& y) const {
+struct node_func_less {
+	// true iff x < y
+	bool operator()(const node& x, const node& y) const {
+		for(int i=0; i < positions; i++) {
+			if (x.qubits[i] != y.qubits[i]) {
+				return x.qubits[i] < y.qubits[i];
+			}
+		}
+		return false;
+	}
+};
+
+struct node_cost_greater {
+	// true iff x > y
+	bool operator()(const node& x, const node& y) const {
 		if ((x.cost_fixed + x.cost_heur + x.cost_heur2) != (y.cost_fixed + y.cost_heur + y.cost_heur2)) {
 			return (x.cost_fixed + x.cost_heur + x.cost_heur2) > (y.cost_fixed + y.cost_heur + y.cost_heur2);
 		}
@@ -52,18 +71,25 @@ struct node_cmp {
 			return true;
 		}
 
-		return x.cost_heur + x.cost_heur2 > y.cost_heur + y.cost_heur2;
+		if (x.cost_heur + x.cost_heur2 != y.cost_heur + y.cost_heur2) {
+			return x.cost_heur + x.cost_heur2 > y.cost_heur + y.cost_heur2;
+		} else {
+			return node_func_less{}(x, y);
+		}
+
 	}
 };
 
-int** dist;
-int positions;
-unsigned long ngates = 0;
-unsigned int nqubits = 0;
+struct cleanup_node {
+	void operator()(const node& x) {
+		delete[] x.qubits;
+		delete[] x.locations;
+	}
+};
 
 std::set<edge> graph;
 vector<vector<QASMparser::gate> > layers;
-priority_queue<node, std::vector<node>, node_cmp> nodes;
+unique_priority_queue<node, cleanup_node, node_cost_greater, node_func_less> nodes;
 
 
 //build a graph representing the coupling map of IBM QX5
