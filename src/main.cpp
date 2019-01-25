@@ -12,7 +12,7 @@
 #define HEURISTIC_ADMISSIBLE 1
 #define USE_INITIAL_MAPPING 1
 #define MINIMAL_OUTPUT 1
-#define DUMP_MAPPED_CIRCUIT 0
+#define DUMP_MAPPED_CIRCUIT 1
 
 using namespace std;
 
