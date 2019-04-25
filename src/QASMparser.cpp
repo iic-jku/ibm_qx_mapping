@@ -25,6 +25,7 @@ by citing the following publication:
 
 #include <QASMparser.h>
 #include <algorithm>
+#include <cmath>
 
 QASMparser::QASMparser(std::string filename) {
 	in = new std::ifstream (filename, std::ifstream::in);
@@ -104,15 +105,15 @@ QASMparser::Expr* QASMparser::QASMexponentiation() {
 	if(sym == Token::Kind::real) {
 		scan();
 		return new Expr(Expr::Kind::number, NULL, NULL, t.valReal, "");
-		//return mpreal(t.val_real);
+		//return t.val_real;
 	} else if(sym == Token::Kind::nninteger) {
 		scan();
 		return new Expr(Expr::Kind::number, NULL, NULL, t.val, "");
-		//return mpreal(t.val);
+		//return t.val;
 	} else if(sym == Token::Kind::pi) {
 		scan();
-		return new Expr(Expr::Kind::number, NULL, NULL, mpfr::const_pi(), "");
-		//return mpfr::const_pi();
+		return new Expr(Expr::Kind::number, NULL, NULL, 3.141592653589793238463, "");
+		//return 3.141592653589793238463;
 	} else if(sym == Token::Kind::identifier) {
 		scan();
 		return new Expr(Expr::Kind::id, NULL, NULL, 0, t.str);
@@ -130,17 +131,17 @@ QASMparser::Expr* QASMparser::QASMexponentiation() {
 		check(Token::Kind::rpar);
 		if(x->kind == Expr::Kind::number) {
 			if(op == Token::Kind::sin) {
-				x->num = sin(x->num);
+				x->num = std::sin(x->num);
 			} else if(op == Token::Kind::cos) {
-				x->num = cos(x->num);
+				x->num = std::cos(x->num);
 			} else if(op == Token::Kind::tan) {
-				x->num = tan(x->num);
+				x->num = std::tan(x->num);
 			} else if(op == Token::Kind::exp) {
-				x->num = exp(x->num);
+				x->num = std::exp(x->num);
 			} else if(op == Token::Kind::ln) {
-				x->num = log(x->num);
+				x->num = std::log(x->num);
 			} else if(op == Token::Kind::sqrt) {
-				x->num = sqrt(x->num);
+				x->num = std::sqrt(x->num);
 			}
 			return x;
 		} else {
@@ -264,13 +265,13 @@ void QASMparser::QASMargsList(std::vector<std::pair<int, int> >& arguments) {
 	}
 }
 
-void QASMparser::addUgate(int target, mpfr::mpreal theta, mpfr::mpreal phi, mpfr::mpreal lambda) {
+void QASMparser::addUgate(int target, double theta, double phi, double lambda) {
     gate g;
     unsigned int layer;
 
     g.target = target;
     g.control = -1;
-    snprintf ( g.type, 127, "U(%f, %f, %f)", theta.toDouble(), phi.toDouble(), lambda.toDouble());
+    snprintf ( g.type, 127, "U(%f, %f, %f)", theta, phi, lambda);
 
     layer = last_layer[g.target] + 1;
     last_layer[g.target] = layer;
