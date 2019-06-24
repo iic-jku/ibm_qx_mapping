@@ -551,7 +551,7 @@ int main(int argc, char** argv) {
 #if !MINIMAL_OUTPUT
     std::cout << "Circuit name: " << bName << " (requires " << nqubits << " qubits)" << std::endl;
 
-	std::cout << endl << "Before mapping: " << std::endl;
+	std::cout << std::endl << "Before mapping: " << std::endl;
 	std::cout << "  elementary gates: " << ngates << std::endl;
 	std::cout << "  depth: " << layers.size() << std::endl;
 #else
