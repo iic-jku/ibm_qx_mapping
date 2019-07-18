@@ -30,8 +30,6 @@ by citing the following publication:
 #include <QASMtoken.hpp>
 #include <vector>
 #include <set>
-#include <gmp.h>
-#include <mpreal.h>
 
 class QASMparser {
 public:
@@ -62,13 +60,13 @@ private:
 	class Expr {
 	public:
 		enum class Kind {number, plus, minus, sign, times, sin, cos, tan, exp, ln, sqrt, div, power, id};
-		mpfr::mpreal num;
+		double num;
 		Kind kind;
 		Expr* op1 = NULL;
 		Expr* op2 = NULL;
 		std::string id;
 
-		Expr(Kind kind,  Expr* op1, Expr* op2, mpfr::mpreal num, std::string id) {
+		Expr(Kind kind,  Expr* op1, Expr* op2, double num, std::string id) {
 			this->kind = kind;
 			this->op1 = op1;
 			this->op2 = op2;
@@ -202,7 +200,7 @@ private:
     int* last_layer;
     unsigned int ngates = 0;
 
-    void addUgate(int target, mpfr::mpreal theta, mpfr::mpreal phi, mpfr::mpreal lambda);
+    void addUgate(int target, double theta, double phi, double lambda);
     void addCXgate(int target, int control);
 };
 
