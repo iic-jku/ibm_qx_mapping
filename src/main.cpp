@@ -8,9 +8,9 @@
 #include <QASMparser.h>
 #include "unique_priority_queue.h"
 
-#define LOOK_AHEAD 0
-#define HEURISTIC_ADMISSIBLE 1
-#define USE_INITIAL_MAPPING 1
+#define LOOK_AHEAD 1
+#define HEURISTIC_ADMISSIBLE 0
+#define USE_INITIAL_MAPPING 0
 #define MINIMAL_OUTPUT 1
 #define DUMP_MAPPED_CIRCUIT 0
 
@@ -90,6 +90,22 @@ struct cleanup_node {
 std::set<edge> graph;
 vector<vector<QASMparser::gate> > layers;
 unique_priority_queue<node, cleanup_node, node_cost_greater, node_func_less> nodes;
+
+
+void build_graph_NN(int nqubits) {
+	graph.clear();
+	positions = 16;
+
+    edge e;
+    for(int i = 0; i < nqubits-1; i++) {
+        e.v1 = i;
+        e.v2 = i+1;
+        graph.insert(e);
+        e.v1 = i+1;
+        e.v2 = i;
+        graph.insert(e);
+    }
+}
 
 
 //build a graph representing the coupling map of IBM QX5
@@ -319,9 +335,9 @@ void expand_node(const vector<int>& qubits, unsigned int qubit, edge *swaps, int
 		new_node.cost_heur2 = 0;
 #if LOOK_AHEAD
 		if(next_layer != -1) {
-			for (vector<gate>::const_iterator it = layers[next_layer].begin(); it != layers[next_layer].end();
+			for (vector<QASMparser::gate>::const_iterator it = layers[next_layer].begin(); it != layers[next_layer].end();
 							it++) {
-				gate g = *it;
+				QASMparser::gate g = *it;
 				if (g.control != -1) {
 					if(new_node.locations[g.control] == -1 && new_node.locations[g.target] == -1) {
 						//No additional penalty in heuristics
@@ -512,8 +528,6 @@ int main(int argc, char** argv) {
 	}
 #endif
 
-	build_graph_QX5();
-	build_dist_table(graph);
 
 	QASMparser* parser = new QASMparser(argv[1]);
 	parser->Parse();
@@ -522,7 +536,17 @@ int main(int argc, char** argv) {
 	nqubits = parser->getNqubits();
 	ngates = parser->getNgates();
 
+//    build_graph_NN(nqubits);
+	build_graph_QX5();
+	build_dist_table(graph);
+
 	delete parser;
+
+    if(nqubits > positions) {
+        cerr << "ERROR before mapping: more logical qubits than physical ones!" << endl;
+        exit(1);
+    }
+
 
 	unsigned int width = 0;
 	for (vector<vector<QASMparser::gate> >::iterator it = layers.begin(); it != layers.end(); it++) {
