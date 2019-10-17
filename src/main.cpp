@@ -103,14 +103,9 @@ void build_graph_NN(int nqubits) {
 	graph.clear();
 	positions = 16;
 
-    edge e;
     for(int i = 0; i < nqubits-1; i++) {
-        e.v1 = i;
-        e.v2 = i+1;
-        graph.insert(e);
-        e.v1 = i+1;
-        e.v2 = i;
-        graph.insert(e);
+        graph.emplace(i, i+1);
+        graph.emplace(i+1, i);
     }
 }
 
@@ -663,8 +658,8 @@ int main(int argc, char** argv) {
 						}
 					}
                     strcpy(cnot.type, "CX");
-                    strcpy(h1.type, "U(pi/2,0,pi)");
-                    strcpy(h2.type, "U(pi/2,0,pi)");
+                    strcpy(h1.type, "U3(pi/2,0,pi)");
+                    strcpy(h2.type, "U3(pi/2,0,pi)");
 					h1.control = h2.control = -1;
 					h1.target = e.v1;
 					h2.target = e.v2;
@@ -724,7 +719,7 @@ int main(int argc, char** argv) {
 					}
 					QASMparser::gate h;
 					h.control = -1;
-					strcpy(h.type, "U(pi/2,0,pi)");
+					strcpy(h.type, "U3(pi/2,0,pi)");
 					h.target = g.target;
 					all_gates.push_back(h);
 

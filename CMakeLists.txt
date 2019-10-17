@@ -1,10 +1,13 @@
 cmake_minimum_required (VERSION 3.0)
 project( ibm_qx_mapping )
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH})
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-SET(CMAKE_CXX_FLAGS "-Wall -g -O2 -DNDEBUG -DVERSION=\"$(VERSION)\" -std=c++11")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -Wpedantic -pedantic")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall -DNDEBUG -g0 -O3")
 
-
-add_executable(ibm_qx_mapping src/main.cpp src/QASMparser.cpp src/QASMscanner.cpp src/QASMtoken.cpp)
+file(GLOB_RECURSE SOURCES src/*.cpp)
+add_executable(dd_example ${SOURCES})
 include_directories(src)
