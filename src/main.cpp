@@ -11,7 +11,7 @@
 #define LOOK_AHEAD 1
 #define HEURISTIC_ADMISSIBLE 0
 #define USE_INITIAL_MAPPING 0
-#define MINIMAL_OUTPUT 1
+#define MINIMAL_OUTPUT 0      // 1 for comma seperated output in a single line
 #define DUMP_MAPPED_CIRCUIT 0
 
 #define ARCH_LINEAR_N 0
@@ -97,17 +97,6 @@ struct cleanup_node {
 std::set<edge> graph;
 std::vector<std::vector<QASMparser::gate> > layers;
 unique_priority_queue<node, cleanup_node, node_cost_greater, node_func_less> nodes;
-
-
-void build_graph_NN(int nqubits) {
-	graph.clear();
-	positions = 16;
-
-    for(int i = 0; i < nqubits-1; i++) {
-        graph.emplace(i, i+1);
-        graph.emplace(i+1, i);
-    }
-}
 
 
 //build a graph representing the coupling map of IBM QX5
