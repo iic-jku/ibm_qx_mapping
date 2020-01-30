@@ -24,11 +24,15 @@ The package has been tested under Linux (Ubuntu 17.04, 64-bit) and should be com
 
 To build the quantum simulator type:
 
-    mkdir build
-    cd build 
-    cmake ..
-    make
-    cd ..
+```commandline
+mkdir build
+cd build 
+cmake ..
+cmake --build .
+cd ..
+./build/ibm_qx_mapping "examples/4gt11_84.qasm" "mapped.qasm"
+```
+
 
 The mapping of a quantum circuit can be conducted as follows:
 
@@ -44,11 +48,13 @@ However, they can be easily conducted by passing the resulting circuit to IBM's 
 If you use out mapping algorithm for your research, we would be thankful if you referred to it by citing the following publication: 
 
 ```
-@article{zulehner2018efficient,
+@article{zulehner2019efficient,
   title={An efficient methodology for mapping quantum circuits to the {IBM} {QX} architectures},
   author={Zulehner, Alwin and Paler, Alexandru and Wille, Robert},
-  journal={IEEE Transactions on Computer-Aided Design of Integrated Circuits and Systems},
-  year={2018},
-  publisher={IEEE}
+  journal={{IEEE} Transactions on Computer-Aided Design of Integrated Circuits and Systems},
+  volume={38},
+  number={7},
+  pages={1226--1236},
+  year={2019}
 }
 ```

@@ -1,9 +1,7 @@
 #include <iostream>
 #include <algorithm>
-#include <string.h>
+#include <cstring>
 #include <set>
-#include <climits>
-#include <fstream>
 
 #include "QASMparser.h"
 #include "unique_priority_queue.h"
@@ -12,7 +10,7 @@
 #define HEURISTIC_ADMISSIBLE 0
 #define USE_INITIAL_MAPPING 0
 #define MINIMAL_OUTPUT 0      // 1 for comma seperated output in a single line
-#define DUMP_MAPPED_CIRCUIT 0
+#define DUMP_MAPPED_CIRCUIT 1
 
 #define ARCH_LINEAR_N 0
 #define ARCH_IBM_QX5 1
