@@ -12,6 +12,7 @@ static void build_graph_linear(int nqubits)           UNUSED_FUNCTION;
 static void build_graph_QX5()                         UNUSED_FUNCTION;
 
 
+
 /**
  * generates a graph from the file with the filename input, 
  * if the name is empty a graph according to ARCH is generated
@@ -65,20 +66,12 @@ bool generate_graph(const std::string input) {
  */
 static void set_dijkstra_node(dijkstra_node* nodes, std::priority_queue<dijkstra_node*, std::vector<dijkstra_node*>, dijkstra_node_cmp>& queue,
 					          const int parent, const int pos, const bool contains_correct_edge) {
-	if(nodes[pos].length < 0) {
+	if(!nodes[pos].visited && 
+		(nodes[pos].length < 0 || dijkstra_node_cmp::compare_parameters(nodes[parent].length + 1, nodes[pos].length, contains_correct_edge, nodes[pos].contains_correct_edge))) {
 		nodes[pos].contains_correct_edge = contains_correct_edge;
 		nodes[pos].length                = nodes[parent].length + 1;
 		queue.push(nodes + pos);
-	} else if(!nodes[pos].contains_correct_edge && contains_correct_edge && nodes[pos].length == nodes[parent].length + 1) {
-		std::priority_queue<dijkstra_node*, std::vector<dijkstra_node*>, dijkstra_node_cmp> temp;
-		nodes[pos].contains_correct_edge = true;
-
-		while(!queue.empty()) {
-			temp.push(queue.top());
-			queue.pop();
-		}
-		queue = temp;
-	}
+	} 
 }
 
 /**
@@ -87,13 +80,12 @@ static void set_dijkstra_node(dijkstra_node* nodes, std::priority_queue<dijkstra
 static void dijkstra(dijkstra_node* nodes, const int start, const std::set<edge>& graph) {
 	std::priority_queue<dijkstra_node*, std::vector<dijkstra_node*>, dijkstra_node_cmp> queue;
 	queue.push(nodes + start);
-
 	while(!queue.empty()) {
 		dijkstra_node* current = queue.top();
+		current->visited = true;
 		queue.pop();
 		int cur = current->pos;
-		for (std::set<edge>::iterator it = graph.begin(); it != graph.end();
-				it++) {
+		for (std::set<edge>::iterator it = graph.begin(); it != graph.end(); it++) {
 			edge e = *it;
 			if (cur == e.v1) { 
 				set_dijkstra_node(nodes, queue, e.v1, e.v2, true);	
@@ -119,6 +111,7 @@ static void build_dist_table(const std::set<edge>& graph) {
 		for (int j = 0; j < positions; j++) {
 			nodes[j].pos                   = j;
 			nodes[j].contains_correct_edge = false;
+			nodes[j].visited               = false;
 			nodes[j].length                = -1;
 		}
 		nodes[i].length = 0;

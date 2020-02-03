@@ -41,7 +41,7 @@
 #endif
 
 #ifndef ARCH
-#define ARCH ARCH_LINEAR_N     // assume default architecture
+#define ARCH ARCH_IBM_QX5     // assume default architecture
 #endif
 
 /*
@@ -179,20 +179,21 @@ struct circuit_properties {
 struct dijkstra_node {
 	int  pos;
 	bool contains_correct_edge;
+	bool visited;
     int  length;
 };
 
 struct dijkstra_node_cmp {
+	static bool compare_parameters(int x_length, int y_length, bool x_contains_correct_edge, bool y_contains_correct_edge) {
+		if(x_length != y_length) {
+			return x_length < y_length;
+		}
+
+		return x_contains_correct_edge && !y_contains_correct_edge;
+	}
+
 	bool operator()(dijkstra_node* x, dijkstra_node* y) const {
-		if(x->length != y->length) {
-			return x->length > y->length;
-		}
-
-		if(!x->contains_correct_edge) {
-			return true;
-		}
-
-		return y->contains_correct_edge;
+		return !dijkstra_node_cmp::compare_parameters(x->length, y->length, x->contains_correct_edge, y->contains_correct_edge);
 	}
 };
 
