@@ -17,7 +17,7 @@ void initial_mapping(circuit_properties& properties) {
 	for (std::vector<QASMparser::gate>::iterator it = layers[0].begin(); it != layers[0].end(); it++) {
 		QASMparser::gate g = *it;
 		if (g.control != -1) {
-			for(std::set<edge>::iterator it = graph.begin(); it != graph.end(); it++) {
+			for(std::set<edge>::iterator it = arch.graph.begin(); it != arch.graph.end(); it++) {
 				if(qubits[it->v1] == -1 && qubits[it->v2] == -1) {
 					qubits[it->v1]       = g.control;
 					qubits[it->v2]       = g.target;
@@ -47,9 +47,9 @@ void initial_mapping(circuit_properties& properties) {
 void map_to_min_distance(int* map, int* loc, const int source, const int target) {
 	int min     = 1000;
 	int min_pos = -1;
-	for(int i = 0; i < positions; i++) {
-		if(map[i] == -1 && dist[loc[source]][i] < min) {
-			min     = dist[loc[source]][i];
+	for(int i = 0; i < arch.positions; i++) {
+		if(map[i] == -1 && arch.dist[loc[source]][i] < min) {
+			min     = arch.dist[loc[source]][i];
 			min_pos = i;
 		}
 	}
@@ -73,7 +73,7 @@ void map_unmapped_gates(const int layer, circuit_properties& p, node& n, std::ve
 
 			if(loc[g.control] == -1 && loc[g.target] == -1) {
                 std::set<edge> possible_edges;
-				for(std::set<edge>::iterator it = graph.begin(); it != graph.end(); it++) {
+				for(std::set<edge>::iterator it = arch.graph.begin(); it != arch.graph.end(); it++) {
 					if(map[it->v1] == -1 && map[it->v2] == -1) {
 						possible_edges.insert(*it);
 					}
@@ -93,7 +93,7 @@ void map_unmapped_gates(const int layer, circuit_properties& p, node& n, std::ve
 			} else if(loc[g.target] == -1) {
 				map_to_min_distance(map, loc, g.control, g.target);
 			}
-			n.cost_heur = std::max(n.cost_heur, dist[loc[g.control]][loc[g.target]]);
+			n.cost_heur = std::max(n.cost_heur, arch.dist[loc[g.control]][loc[g.target]]);
 		}
 	}
 }
@@ -136,8 +136,8 @@ void fix_positions_of_single_qubit_gates(int* locations, int* qubits, std::vecto
  * generate the circuit based on the gates
  */
 void generate_circuit(std::vector<std::vector<QASMparser::gate>>& mapped_circuit, const std::vector<QASMparser::gate>& all_gates) {
-	int *last_layer = new int[positions];
-	for(int i = 0; i < positions; i++) {
+	int *last_layer = new int[arch.positions];
+	for(int i = 0; i < arch.positions; i++) {
 		last_layer[i] = -1;
 	}
 
@@ -174,10 +174,10 @@ void generate_circuit(std::vector<std::vector<QASMparser::gate>>& mapped_circuit
 
 void map_to_inital_permutation(std::vector<QASMparser::gate>& all_gates, circuit_properties& properties) { // add swaps so that each logical qubit is mapped to the pysical qubit with the same index
 	int locations[nqubits];
-	int qubits[positions];
+	int qubits[arch.positions];
 	
 	memcpy(locations, properties.locations, sizeof(int) * nqubits);
-	memcpy(qubits,    properties.qubits,    sizeof(int) * positions);
+	memcpy(qubits,    properties.qubits,    sizeof(int) * arch.positions);
 	
 	std::cout << std::endl;
 	for(int i = 0; i < (int)nqubits; i++) {

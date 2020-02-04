@@ -27,9 +27,12 @@ static void apply_edge(const node& n, const edge e) {
 #if SPECIAL_OPT
 	int max_depth = std::max(n.depths[e.v1], n.depths[e.v2]) + DEPTH_SWAP;
 	n.depths[e.v1]      = max_depth;
-	n.fidelities[e.v1] += FIDELITY_SWAP;
 	n.depths[e.v2]      = max_depth;
-	n.fidelities[e.v2] += FIDELITY_SWAP;
+	n.workload[e.v1]   += WORKLOAD_SWAP;
+	n.workload[e.v2]   += WORKLOAD_SWAP;
+	double fid = arch.fidelity_dist[e.v1][e.v2] * arch.fidelity_dist[e.v1][e.v2] * arch.fidelity_dist[e.v1][e.v2];
+	n.fidelities[e.v1] *= fid * arch.singlequbit_fidelities[e.v1] * arch.singlequbit_fidelities[e.v1];
+	n.fidelities[e.v2] *= fid * arch.singlequbit_fidelities[e.v2] * arch.singlequbit_fidelities[e.v2];
 #endif
 }
 
@@ -41,11 +44,12 @@ static node create_node(const int cost, const int nswaps, SWAP_LIST_TYPE swaps) 
 	n.cost_fixed = cost;
 	n.cost_heur  = n.lookahead_penalty = 0;
 	n.total_cost = 0;
-	n.qubits     = new int[positions];
+	n.qubits     = new int[arch.positions];
 	n.locations  = new int[nqubits];
 #if SPECIAL_OPT
-	n.depths     = new int[positions];
-	n.fidelities = new int[positions];
+	n.depths     = new int[arch.positions];
+	n.workload   = new int[arch.positions];
+	n.fidelities = new double[arch.positions];
 #endif
     n.nswaps     = nswaps;
 	n.done       = 1;
@@ -67,14 +71,15 @@ node create_node() {
 /**
  * creates a node based on a base node
  */
-node create_node(const node& base, const edge* new_swaps, const int nswaps) {
+node create_node(const node& base, edge const * const new_swaps, const int nswaps) {
     node n = create_node(base.cost_fixed + COST_SWAP * nswaps, base.nswaps + nswaps, base.swaps);
     
-	memcpy(n.qubits,     base.qubits,     sizeof(int) * positions);
+	memcpy(n.qubits,     base.qubits,     sizeof(int) * arch.positions);
 	memcpy(n.locations,  base.locations,  sizeof(int) * nqubits);
 #if SPECIAL_OPT
-	memcpy(n.depths,     base.depths,     sizeof(int) * positions);
-    memcpy(n.fidelities, base.fidelities, sizeof(int) * positions);
+	memcpy(n.depths,     base.depths,     sizeof(int)    * arch.positions);
+    memcpy(n.workload,   base.workload,   sizeof(int)    * arch.positions);
+	memcpy(n.fidelities, base.fidelities, sizeof(double) * arch.positions);
 #endif
 
 #if ONE_SWAP_PER_EXPAND
@@ -99,11 +104,12 @@ node create_node(const node& base, const edge* new_swaps, const int nswaps) {
  * updates the node based on the circuit properties
  */
 void update_node(node& n, const circuit_properties& p) {
-	memcpy(n.qubits,     p.qubits,     sizeof(int) * positions);
+	memcpy(n.qubits,     p.qubits,     sizeof(int) * arch.positions);
 	memcpy(n.locations,  p.locations,  sizeof(int) * nqubits);
 #if SPECIAL_OPT
-	memcpy(n.depths,     p.depths,     sizeof(int) * positions);
-	memcpy(n.fidelities, p.fidelities, sizeof(int) * positions);
+	memcpy(n.depths,     p.depths,     sizeof(int)    * arch.positions);
+	memcpy(n.workload,   p.workload,   sizeof(int)    * arch.positions);
+	memcpy(n.fidelities, p.fidelities, sizeof(double) * arch.positions);
 #endif
 }
 

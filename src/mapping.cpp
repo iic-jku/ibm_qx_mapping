@@ -29,13 +29,15 @@ static void lookahead(const int layer, node& new_node) {
 		}
 		double penalty = 0;
 #if SPECIAL_OPT
-		// considers the depth and fidelity of the layers between this and the next layer with cnots
-		if(i == 0 && (DEPTH_PERCENTAGE > 0 || FIDELITY_NORM > 0)) { // calculate depth for the first next layer
-			int* depths     = new int[positions];
-			int* fidelities = new int[positions];
+		// considers the depth, workload and fidelities of the layers between this and the next layer with cnots
+		if(i == 0 && SPECIAL_OPT_VALUES_SET) { // calculate depth for the first next layer
+			int* depths        = new int[arch.positions];
+			int* workload      = new int[arch.positions];
+			double* fidelities = new double[arch.positions];
 			
-			memcpy(depths,     new_node.depths,     sizeof(int) * positions);
-			memcpy(fidelities, new_node.fidelities, sizeof(int) * positions);
+			memcpy(depths,     new_node.depths,     sizeof(int)    * arch.positions);
+			memcpy(workload,   new_node.workload,   sizeof(int)    * arch.positions);
+			memcpy(fidelities, new_node.fidelities, sizeof(double) * arch.positions);
 
 			for(int j = layer + 1; j <= next_layer; j++) {
 				for (std::vector<QASMparser::gate>::const_iterator it = layers[j].begin(); it != layers[j].end();
@@ -48,35 +50,43 @@ static void lookahead(const int layer, node& new_node) {
 							//No additional penalty in heuristics
 						} else if(control == -1) {
 							depths[target]     += DEPTH_GATE;
-							fidelities[target] += FIDELITY_GATE;
+							workload[target]   += WORKLOAD_GATE;
+							fidelities[target] *= arch.singlequbit_fidelities[target];
 						} else if(target == -1 ) {
 							depths[control]     += DEPTH_GATE;
-							fidelities[control] += FIDELITY_GATE;
+							workload[control]   += WORKLOAD_GATE;
+							fidelities[control] *= arch.singlequbit_fidelities[target];
 						} else {
-							if(dist[control][target] < 1) {
+							if(arch.dist[control][target] < 1) {
 								depths[control]     += DEPTH_GATE;	
 								depths[target]      += DEPTH_GATE;	
-								fidelities[control] += FIDELITY_CNOT;	
-								fidelities[target]  += FIDELITY_CNOT;		
+								workload[control]   += WORKLOAD_CNOT;	
+								workload[target]    += WORKLOAD_CNOT;
+								fidelities[control] *= arch.fidelity_dist[control][target];		
+								fidelities[target]  *= arch.fidelity_dist[control][target];		
 							} else {
 								depths[control]     += DEPTH_SWAP;	
 								depths[target]      += DEPTH_SWAP;	
-								fidelities[control] += FIDELITY_SWAP;	
-								fidelities[target]  += FIDELITY_SWAP;										
+								workload[control]   += WORKLOAD_SWAP;	
+								workload[target]    += WORKLOAD_SWAP;	
+								double fid           = arch.fidelity_dist[control][target]  * arch.fidelity_dist[control][target] * arch.fidelity_dist[control][target];
+								fidelities[control] *= fid * arch.singlequbit_fidelities[control] * arch.singlequbit_fidelities[control];
+								fidelities[target]  *= fid * arch.singlequbit_fidelities[target]  * arch.singlequbit_fidelities[target];				
 							}
 						}
 					} else {
 						depths[target]     += DEPTH_GATE;
-						fidelities[target] += FIDELITY_GATE;	
+						workload[target]   += WORKLOAD_GATE;	
+						fidelities[target] *= arch.singlequbit_fidelities[target];
 					}	
 				}
 			}
-			new_node.lookahead_penalty = factor * 
-					  (get_maximal_depth(depths) / ((double) DEPTH_SWAP) * DEPTH_PERCENTAGE + 
-					  fidelity_cost(fidelities)  * FIDELITY_NORM);
+			new_node.lookahead_penalty = factor * get_total_lookahead_cost(depths, workload, fidelities);
+					 
 			
 			delete[] depths;
-			delete[] fidelities;			
+			delete[] workload;	
+			delete[] fidelities;		
 		}
 #endif
 		for (std::vector<QASMparser::gate>::const_iterator it = layers[next_layer].begin(); it != layers[next_layer].end();
@@ -87,17 +97,17 @@ static void lookahead(const int layer, node& new_node) {
 					//No additional penalty in heuristics
 				} else if(new_node.locations[g.control] == -1) {
 					int min = 1000;
-					for(int i = 0; i < positions; i++) {
-						if(new_node.qubits[i] == -1 && dist[i][new_node.locations[g.target]] < min) {
-							min = dist[i][new_node.locations[g.target]];
+					for(int i = 0; i < arch.positions; i++) {
+						if(new_node.qubits[i] == -1 && arch.dist[i][new_node.locations[g.target]] < min) {
+							min = arch.dist[i][new_node.locations[g.target]];
 						}
 					}
 					penalty = heuristic_function(penalty, min);
 				} else if(new_node.locations[g.target] == -1) {
 					int min = 1000;
-					for(int i = 0; i < positions; i++) {
-						if(new_node.qubits[i] == -1 && dist[new_node.locations[g.control]][i] < min) {
-							min = dist[new_node.locations[g.control]][i];
+					for(int i = 0; i < arch.positions; i++) {
+						if(new_node.qubits[i] == -1 && arch.dist[new_node.locations[g.control]][i] < min) {
+							min = arch.dist[new_node.locations[g.control]][i];
 						}
 					}
 					penalty = heuristic_function(penalty, min);
@@ -133,7 +143,7 @@ static void expand_node_add_one_swap(const std::vector<int>& qubits, const edge 
 		QASMparser::gate g = *it;
 		if (g.control != -1) {
 			new_node.cost_heur = get_heuristic_cost(new_node.cost_heur, new_node, g);
-			check_if_not_done(new_node, dist[new_node.locations[g.control]][new_node.locations[g.target]]);
+			check_if_not_done(new_node, arch.dist[new_node.locations[g.control]][new_node.locations[g.target]]);
 		}
 	}
 #if LOOK_AHEAD
@@ -154,7 +164,7 @@ static void expand_node(const std::vector<int>& qubits, const node base_node, co
 
 	// successor = one swap for each considered qubit for each edge in the coupling graph
 	for(unsigned int qubit = 0; qubit < qubits.size(); qubit++) {
-		for (std::set<edge>::iterator it = graph.begin(); it != graph.end(); it++) {
+		for (std::set<edge>::iterator it = arch.graph.begin(); it != arch.graph.end(); it++) {
 			edge e = *it;			
 			if (e.v1 == base_node.locations[qubits[qubit]] 			// swap operations only according to coupling graph
 		     || e.v2 == base_node.locations[qubits[qubit]]) {
@@ -196,7 +206,7 @@ static void expand_node(const std::vector<int>& qubits, unsigned int qubit, edge
 			QASMparser::gate g = *it;
 			if (g.control != -1) {
 				new_node.cost_heur = get_heuristic_cost(new_node.cost_heur, new_node, g);
-				check_if_not_done(new_node, dist[new_node.locations[g.control]][new_node.locations[g.target]]);
+				check_if_not_done(new_node, arch.dist[new_node.locations[g.control]][new_node.locations[g.target]]);
 			}
 		}
 
@@ -209,7 +219,7 @@ static void expand_node(const std::vector<int>& qubits, unsigned int qubit, edge
 	} else {
 		expand_node(qubits, qubit + 1, swaps, nswaps, used, base_node, gates, next_layer);
 
-		for (std::set<edge>::iterator it = graph.begin(); it != graph.end(); it++) {
+		for (std::set<edge>::iterator it = arch.graph.begin(); it != arch.graph.end(); it++) {
 			edge e = *it;
 			if (e.v1 == base_node.locations[qubits[qubit]]
 				|| e.v2 == base_node.locations[qubits[qubit]]) {
@@ -280,8 +290,8 @@ node a_star_fixlayer(const int layer, circuit_properties& properties) {
 		delete_node(n);
 	}
 #else
-	int *used = new int[positions];
-	for (int i = 0; i < positions; i++) {
+	int *used = new int[arch.positions];
+	for (int i = 0; i < arch.positions; i++) {
 		used[i] = 0;
 	}
 	edge *edges = new edge[considered_qubits.size()];
@@ -372,7 +382,7 @@ void mapping(const std::vector<QASMparser::gate>& gates, std::vector<std::vector
 					QASMparser::gate h1;
 					QASMparser::gate h2;
 
-					if (graph.find(e) != graph.end()) {
+					if (arch.graph.find(e) != arch.graph.end()) {
 						cnot.control = e.v1;
 						cnot.target = e.v2;
 					} else {
@@ -382,7 +392,7 @@ void mapping(const std::vector<QASMparser::gate>& gates, std::vector<std::vector
 						int tmp = e.v1;
 						e.v1 = e.v2;
 						e.v2 = tmp;
-						if (graph.find(e) == graph.end()) {
+						if (arch.graph.find(e) == arch.graph.end()) {
                             std::cerr << "ERROR: invalid SWAP gate" << std::endl;
                             exit(2);
 						}
@@ -440,11 +450,11 @@ void mapping(const std::vector<QASMparser::gate>& gates, std::vector<std::vector
 				e.v1 = g.control;
 				e.v2 = g.target;
 
-				if (graph.find(e) == graph.end()) {
+				if (arch.graph.find(e) == arch.graph.end()) {
 					//flip the direction of the CNOT by inserting H gates
 					e.v1 = g.target;
 					e.v2 = g.control;
-					if (graph.find(e) == graph.end()) {
+					if (arch.graph.find(e) == arch.graph.end()) {
                         std::cerr << "ERROR: invalid CNOT: " << e.v1 << " - " << e.v2 << std::endl;
                         exit(3);
 					}
