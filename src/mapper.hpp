@@ -44,7 +44,7 @@
 #endif
 
 #ifndef ARCH
-#define ARCH ARCH_IBM_QX5     // assume default architecture
+#define ARCH ARCH_LINEAR_N     // assume default architecture
 #endif
 
 /*
@@ -53,6 +53,11 @@
 // cost
 const int COST_GATE     = 1;
 const int COST_SWAP     = 7 * COST_GATE;
+
+// fidelity
+const int FIDELITY_GATE = 1;
+const int FIDELITY_CNOT = 5;
+const int FIDELITY_SWAP = 2 * FIDELITY_GATE + 3 * FIDELITY_CNOT;
 
 // depth
 const int DEPTH_GATE    = 1;
@@ -230,6 +235,7 @@ double    calculate_heuristic_cost(dijkstra_node const * const node);
 double    get_total_lookahead_cost(int const * const depths, int const * const workload, double const * const fidelities);
 double    heuristic_function(const double old_heur, const double new_heur);
 double    get_total_cost(const node& n);
+double    heuristic_function(const double old_heur, const double new_heur);
 double    get_heuristic_cost(const double cost_heur, const node& n, const QASMparser::gate& g);
 
 // node_handling
@@ -261,5 +267,6 @@ void map_unmapped_gates(const int layer, circuit_properties& p, node& n, std::ve
 void fix_positions_of_single_qubit_gates(int* locations, int* qubits, std::vector<QASMparser::gate>& all_gates);
 void generate_circuit(std::vector<std::vector<QASMparser::gate>>& mapped_circuit, const std::vector<QASMparser::gate>& all_gates);
 void map_to_inital_permutation(std::vector<QASMparser::gate>& all_gates, circuit_properties& properties); // add swaps so that each logical qubit is mapped to the pysical qubit with the same index
+
 
 #endif /* MAPPER_H_ */
