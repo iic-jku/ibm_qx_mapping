@@ -20,8 +20,8 @@ std::vector<std::vector<QASMparser::gate>> init_layers(const std::vector<QASMpar
 std::vector<std::vector<QASMparser::gate>> init_layers(const std::vector<QASMparser::gate> &gates) {
 	std::vector<std::vector<QASMparser::gate>> layer_gates;
 	unsigned int layer;
-	int* last_layer = new int[positions];
-	for (int i = 0; i < positions; i++) {
+	int* last_layer = new int[arch.positions];
+	for (int i = 0; i < arch.positions; i++) {
 		last_layer[i] = -1;
 	}
 

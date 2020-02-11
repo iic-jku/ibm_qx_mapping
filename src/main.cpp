@@ -9,10 +9,10 @@ namespace po = boost::program_options;
 /**
  * Global variables
  */
-double**       dist;
-int            positions;
-unsigned long  ngates  = 0;
-unsigned int   nqubits = 0;
+architecture   arch;
+unsigned long  ngates                  = 0;
+unsigned long  current_depth           = 0;
+unsigned int   nqubits                 = 0;
 
 std::set<edge>                                                               graph;
 std::vector<std::vector<QASMparser::gate>>                                   layers;
@@ -84,11 +84,11 @@ int main(int argc, char** argv) {
 
 	
 	// graph handling
-	if(!generate_graph(input_coupling)) {
+	if(!create_architecture_properties(input_coupling)) {
 		std::cout << "Error while generating the graph" << std::endl;
 		exit(ERROR);
 	}
-	if(positions > 0 ? nqubits > (unsigned int)positions : (int)nqubits > positions) {
+	if(arch.positions > 0 ? nqubits > (unsigned int)arch.positions : (int)nqubits > arch.positions) {
         std::cerr << "ERROR before mapping: more logical qubits than physical ones!" << std::endl;
         exit(ERROR);
     }
@@ -120,9 +120,11 @@ int main(int argc, char** argv) {
 	int       depth    = mapped_circuit.size();
 	int       cost     = all_gates.size()-total_swaps;
 #if SPECIAL_OPT	
-	long long fidelity = fidelity_cost(properties.fidelities);
+	long long workload = workload_cost(properties.workload);
+	double    fidelity = fidelity_cost(properties.fidelities);
 #else
-	long long fidelity = 0;
+	long long workload = 0;
+	double    fidelity = 0;
 #endif
 	// print statistics
 	if(verbose) {
@@ -134,11 +136,11 @@ int main(int argc, char** argv) {
 
 		std::cout << "\nInitial mapping of the logical qubits (q) to the physical qubits (Q) of the IBM QX5 architecture: " << std::endl;
 
-		for(uint i = 0; i < nqubits; i++) {
+		for(unsigned int i = 0; i < nqubits; i++) {
 			std::cout << "  q" << i << " is initially mapped to Q" << properties.locations[i] << std::endl;
 		} 
 	} else {
-    	std::cout << time << ',' << cost << ',' << depth << std::endl;
+    	std::cout << time << ',' << cost << ',' << depth << "," << fidelity << std::endl;
 	}
 
 	// dump resulting circuit
@@ -180,15 +182,6 @@ int main(int argc, char** argv) {
 							double phi_div   = get_pi_div(phi); 
 							double delta_div = get_pi_div(delta);
 
-							/*
-							std::cout << "THEATA" << theta << std::endl;
-							std::cout << "DIV   " << theta_div << std::endl;
-							std::cout << "PHI   " << phi << std::endl;
-							std::cout << "DIV   " << phi_div << std::endl;
-							std::cout << "DELTA " << delta << std::endl;
-							std::cout << "DIV   " << delta_div << std::endl;
-							*/
-
 							// conversion to rotation gates
 							if(phi_div == 0) {
 								of << "rz1:" << 1                     << " q" << it2->target << std::endl; //1.0 / 3
@@ -205,9 +198,6 @@ int main(int argc, char** argv) {
 							if(delta_div != 0) {
 								of << "rz1:" << delta_div                   << " q" << it2->target << std::endl;
 							}
-							//for(auto x: match)
-							//	std::std::cout << "match: " << x << '\n';
-							//s = match.suffix().str();
 						}
 					}
 				}
@@ -235,11 +225,13 @@ int main(int argc, char** argv) {
 	// store timing
 	if(!output_statistics.empty()) {
 		std::ofstream ofstat (output_statistics, std::ofstream::app);
-		//ofstat << bName << " : " << time << " " << depth << " " << cost << " " << fidelity << " " << alloc_tries << " " << total_swaps << std::endl;
-		ofstat << bName << " : " << time << " " << depth << " " << cost << " " << fidelity << " " << total_swaps << std::endl;
+		//ofstat << bName << " : " << time << " " << depth << " " << cost << " " << workload << " " << alloc_tries << " " << total_swaps << std::endl;
+		ofstat << bName << " : " << time << " " << depth << " " << cost << " " << workload << " " << total_swaps << " " << fidelity << std::endl;
 	}
 
 	delete_circuit_properties(properties);
-	
+	delete_architecture_properties();
+
+
 	return 0;
 }

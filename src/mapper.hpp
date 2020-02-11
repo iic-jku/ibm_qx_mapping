@@ -18,10 +18,13 @@
 #define SUCCESS 0
 #define ERROR   1
 
-#define ARCH_LINEAR_N  0
-#define ARCH_IBM_QX5   1
+#define ARCH_LINEAR_N      0
+#define ARCH_IBM_QX5       1
+#define ARCH_IBM_MELBOURNE 2
 
 #define UNUSED_FUNCTION __attribute__ ((unused))
+
+#define ARCH ARCH_IBM_MELBOURNE
 
 /**
  * Control Defines
@@ -33,7 +36,7 @@
 #define USE_INITIAL_MAPPING  1 // enables initial mapping, it is automatically enabled when using special_opt
 #define HEURISTIC_ADMISSIBLE 1 // enables the admissible heuristic approach
 #define ONE_SWAP_PER_EXPAND  1 // decides whether whole permutations or only one swap should be considered for a expansion step
-#define SPECIAL_OPT          1 // enables special optimizations like depth and fidelity; is additionally controlled by the constants below
+#define SPECIAL_OPT          1 // enables special optimizations like depth and workload; is additionally controlled by the constants below
 
 #if SPECIAL_OPT || VERIFCATION // force initial mapping -> because of keeping track of unmapped gates
 #undef  USE_INITIAL_MAPPING
@@ -41,7 +44,7 @@
 #endif
 
 #ifndef ARCH
-#define ARCH ARCH_IBM_QX5     // assume default architecture
+#define ARCH ARCH_LINEAR_N     // assume default architecture
 #endif
 
 /*
@@ -60,32 +63,44 @@ const int FIDELITY_SWAP = 2 * FIDELITY_GATE + 3 * FIDELITY_CNOT;
 const int DEPTH_GATE    = 1;
 const int DEPTH_SWAP    = 5 * DEPTH_GATE;
 
+// workload
+const int WORKLOAD_GATE = 1;
+const int WORKLOAD_CNOT = 5;
+const int WORKLOAD_SWAP = 2 * WORKLOAD_GATE + 3 * WORKLOAD_CNOT;
+
 // special opt. factors
 const double COST_PERCENTAGE  = 1;
 const double DEPTH_PERCENTAGE = 1 - COST_PERCENTAGE;
-const double FIDELITY_FACTOR  = 0;
-const double FIDELITY_NORM    = FIDELITY_FACTOR / 1000;
-const double INVERSE          = DEPTH_PERCENTAGE * (((double)2) * DEPTH_GATE / DEPTH_SWAP) + COST_PERCENTAGE  * 0.57; // addittional cost if no edge is in the correct direction
+const double WORKLOAD_FACTOR  = 0;
+const double WORKLOAD_NORM    = WORKLOAD_FACTOR / 1000;
+const double FIDELITY_FACTOR  = 0; // good values: 10, 100
+const double FIDELITY_NORM    = FIDELITY_FACTOR / 1;
+const double INVERSE          = DEPTH_PERCENTAGE * (((double)2) * DEPTH_GATE / DEPTH_SWAP) + COST_PERCENTAGE  * 0.57; // additional cost if no edge is in the correct direction
 
 // lookahead
-const int    N_LOOK_AHEADS             = 1; // 20
-const double FIRST_LOOK_AHEAD_FACTOR   = 1; // 0.75
+const int    N_LOOK_AHEADS             = 15;
+const double FIRST_LOOK_AHEAD_FACTOR   = 0.75;
 const double GENERAL_LOOK_AHEAD_FACTOR = 0.5;
+
+const bool   SPECIAL_OPT_VALUES_SET    = (DEPTH_PERCENTAGE != 0 || WORKLOAD_NORM != 0 || FIDELITY_NORM != 0);
 
 /** 
  * Global variables - standard
  */
-extern double**      dist;
-extern int           positions;
 extern unsigned long ngates;
+extern unsigned long current_depth;
 extern unsigned int  nqubits;
 
 /**
  * Types 
  */
 struct edge {
-	int v1;
-	int v2;
+	int    v1;
+	int    v2;
+	double fidelity;
+ 
+	edge() = default;
+	edge(int v1_, int v2_, double fidelity_ = 1) : v1(v1_), v2(v2_), fidelity(fidelity_) {}
 };
 
 inline bool operator<(const edge& lhs, const edge& rhs) {
@@ -96,12 +111,24 @@ inline bool operator<(const edge& lhs, const edge& rhs) {
 }
 
 #if ONE_SWAP_PER_EXPAND
-typedef edge              SWAP_TYPE;
+typedef edge                   SWAP_TYPE;
 #else
 typedef std::vector<edge>      SWAP_TYPE;
 #endif
 
 typedef std::vector<SWAP_TYPE> SWAP_LIST_TYPE;   
+
+
+struct architecture {
+	int            positions;
+	double**       dist;
+	double**       fidelity_dist;
+	double*        initial_fidelities;
+	double*        singlequbit_fidelities;
+	std::set<edge> graph;
+};
+extern architecture arch;
+
 
 struct node {
 	int    cost_fixed;
@@ -111,8 +138,9 @@ struct node {
 	int*   qubits;    // get qubit of location -> -1 indicates that there is "no" qubit at a certain location
 	int*   locations; // get location of qubits -> -1 indicates that a qubit does not have a location -> shall only occur for i > nqubits
 #if SPECIAL_OPT
-	int*   depths;
-	int*   fidelities;
+	int*    depths;
+	int*    workload;
+	double* fidelities;
 #endif
 	int    nswaps;
 	int    done;
@@ -122,7 +150,7 @@ struct node {
 struct node_func_less {
 	// true iff x < y
 	bool operator()(const node& x, const node& y) const {
-		for(int i=0; i < positions; i++) {
+		for(int i=0; i < arch.positions; i++) {
 			if (x.qubits[i] != y.qubits[i]) {
 				return x.qubits[i] < y.qubits[i];
 			}
@@ -160,6 +188,7 @@ struct cleanup_node {
 		delete[] n.locations;
 #if SPECIAL_OPT
 		delete[] n.depths;
+		delete[] n.workload;
 		delete[] n.fidelities;
 #endif
 	}
@@ -171,36 +200,22 @@ struct circuit_properties {
 	int* qubits;
 #if SPECIAL_OPT
 	int* depths;
-	int* fidelities;
+	int* workload;
+	double* fidelities;
 #endif
 };
 
 // dijkstra
 struct dijkstra_node {
-	int  pos;
-	bool contains_correct_edge;
-	bool visited;
-    int  length;
-};
-
-struct dijkstra_node_cmp {
-	static bool compare_parameters(int x_length, int y_length, bool x_contains_correct_edge, bool y_contains_correct_edge) {
-		if(x_length != y_length) {
-			return x_length < y_length;
-		}
-
-		return x_contains_correct_edge && !y_contains_correct_edge;
-	}
-
-	bool operator()(dijkstra_node* x, dijkstra_node* y) const {
-		return !dijkstra_node_cmp::compare_parameters(x->length, y->length, x->contains_correct_edge, y->contains_correct_edge);
-	}
+	bool   contains_correct_edge;
+	bool   visited;
+	int    pos;
+    double cost;
 };
 
 /** 
  * Global variables - special types
  */
-extern std::set<edge>                                                               graph;
 extern std::vector<std::vector<QASMparser::gate>>                                   layers;
 extern unique_priority_queue<node, cleanup_node, node_cost_greater, node_func_less> nodes;
 
@@ -208,20 +223,24 @@ extern unique_priority_queue<node, cleanup_node, node_cost_greater, node_func_le
 /**
  * Functions
  */
-// coupling_graph
-bool generate_graph(const std::string input);
+// architecture_handling
+bool create_architecture_properties(const std::string input);
+void delete_architecture_properties();
 
 // cost
-int       get_maximal_depth(const int* depths);
-long long fidelity_cost(const int* fidelities);
-double    calculate_heuristic_cost(const dijkstra_node* node);
+int       get_maximal_depth(int const * const depths);
+long long workload_cost(int const * const workload);
+double    fidelity_cost(double const * const fidelities);
+double    calculate_heuristic_cost(dijkstra_node const * const node);
+double    get_total_lookahead_cost(int const * const depths, int const * const workload, double const * const fidelities);
+double    heuristic_function(const double old_heur, const double new_heur);
 double    get_total_cost(const node& n);
 double    heuristic_function(const double old_heur, const double new_heur);
 double    get_heuristic_cost(const double cost_heur, const node& n, const QASMparser::gate& g);
 
 // node_handling
 node create_node();
-node create_node(const node& base, const edge* new_swaps, const int nswaps = 1);
+node create_node(const node& base, edge const * const new_swaps, const int nswaps = 1);
 void update_node(node& n, const circuit_properties& p);
 void check_if_not_done(node& n, const int value);
 void delete_node(const node& n);
