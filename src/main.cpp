@@ -10,8 +10,9 @@ namespace po = boost::program_options;
  * Global variables
  */
 architecture   arch;
-unsigned long  ngates  = 0;
-unsigned int   nqubits = 0;
+unsigned long  ngates                  = 0;
+unsigned long  current_depth           = 0;
+unsigned int   nqubits                 = 0;
 
 std::set<edge>                                                               graph;
 std::vector<std::vector<QASMparser::gate>>                                   layers;
@@ -120,7 +121,7 @@ int main(int argc, char** argv) {
 	int       cost     = all_gates.size()-total_swaps;
 #if SPECIAL_OPT	
 	long long workload = workload_cost(properties.workload);
-	double    fidelity = 1 / fidelity_cost(properties.fidelities);
+	double    fidelity = fidelity_cost(properties.fidelities);
 #else
 	long long workload = 0;
 	double    fidelity = 0;
@@ -140,10 +141,6 @@ int main(int argc, char** argv) {
 		} 
 	} else {
     	std::cout << time << ',' << cost << ',' << depth << "," << fidelity << std::endl;
-	}
-
-	for(int i = 0; i < arch.positions; i++) {
-		std::cout << "[" << i << "]: " << properties.fidelities[i] << std::endl;
 	}
 
 	// dump resulting circuit

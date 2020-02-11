@@ -353,7 +353,10 @@ void mapping(const std::vector<QASMparser::gate>& gates, std::vector<std::vector
 #endif
 	//Fix the mapping of each layer
 	for (unsigned int i = 0; i < layers.size(); i++) {
-		node result = a_star_fixlayer(i, properties);
+#if SPECIAL_OPT
+		current_depth = get_maximal_depth(properties.depths);
+#endif
+		node result   = a_star_fixlayer(i, properties);
 
 		adapt_circuit_properties(properties, result);	
 		update_properties(properties, i);

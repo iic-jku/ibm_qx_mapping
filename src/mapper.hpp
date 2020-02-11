@@ -68,13 +68,13 @@ const double COST_PERCENTAGE  = 1;
 const double DEPTH_PERCENTAGE = 1 - COST_PERCENTAGE;
 const double WORKLOAD_FACTOR  = 0;
 const double WORKLOAD_NORM    = WORKLOAD_FACTOR / 1000;
-const double FIDELITY_FACTOR  = 0;
+const double FIDELITY_FACTOR  = 0; // good values: 10, 100
 const double FIDELITY_NORM    = FIDELITY_FACTOR / 1;
 const double INVERSE          = DEPTH_PERCENTAGE * (((double)2) * DEPTH_GATE / DEPTH_SWAP) + COST_PERCENTAGE  * 0.57; // additional cost if no edge is in the correct direction
 
 // lookahead
-const int    N_LOOK_AHEADS             = 1; // 20
-const double FIRST_LOOK_AHEAD_FACTOR   = 1; // 0.75
+const int    N_LOOK_AHEADS             = 15;
+const double FIRST_LOOK_AHEAD_FACTOR   = 0.75;
 const double GENERAL_LOOK_AHEAD_FACTOR = 0.5;
 
 const bool   SPECIAL_OPT_VALUES_SET    = (DEPTH_PERCENTAGE != 0 || WORKLOAD_NORM != 0 || FIDELITY_NORM != 0);
@@ -83,12 +83,12 @@ const bool   SPECIAL_OPT_VALUES_SET    = (DEPTH_PERCENTAGE != 0 || WORKLOAD_NORM
  * Global variables - standard
  */
 extern unsigned long ngates;
+extern unsigned long current_depth;
 extern unsigned int  nqubits;
 
 /**
  * Types 
  */
-
 struct edge {
 	int    v1;
 	int    v2;

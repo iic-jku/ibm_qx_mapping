@@ -44,11 +44,48 @@ long long workload_cost(int const * const workload) {
  * calculates the total fidelity cost based on the different fidelities of gates of the qubits
  */
 double fidelity_cost(double const * const fidelities) {
-    double min_fidelity = 1;
+	/*
+	double min_fidelity = 1;
 	for(int i = 0; i < arch.positions; i++) {
 		min_fidelity = std::min(min_fidelity, fidelities[i]);
 	}
     return 1 / min_fidelity;
+
+	*/
+
+	/*
+	double  avg             = 0;
+	double  nqubits_not_one = 0;
+	double  variance        = 0;
+	for(int i = 0; i < arch.positions; i++) {  // calcualte average
+		if(fidelities[i] != 1) {
+			avg += fidelities[i];
+			nqubits_not_one ++;
+		}
+	}
+	avg /= nqubits_not_one;
+	for(int i = 0; i < arch.positions; i++) {
+		if(fidelities[i] != 1) {
+			double diff = fidelities[i] - avg; 
+			variance += diff * diff;
+		}
+	}
+	
+	return sqrt(variance/(nqubits_not_one + 0.000000001));
+	*/
+	
+	double  nqubits_not_one = 0;
+	double  variance        = 0;
+	
+	for(int i = 0; i < arch.positions; i++) {
+		if(fidelities[i] != 1) {
+			double diff = 1 - fidelities[i]; 
+			variance   += diff * diff;
+			nqubits_not_one ++;
+		}
+	}
+	
+	return sqrt(variance/(nqubits_not_one + 0.000000001));
 }
 
 /**
@@ -79,7 +116,7 @@ double get_total_cost(const node& n) {
 #if SPECIAL_OPT
 	return (fidelity_cost(n.fidelities)                       * FIDELITY_NORM)    +
 		   (workload_cost(n.workload)                         * WORKLOAD_NORM)    + 
-		   (get_maximal_depth(n.depths)/((double) DEPTH_SWAP) * DEPTH_PERCENTAGE) + 
+		   ((get_maximal_depth(n.depths) - current_depth) /((double) DEPTH_SWAP) * DEPTH_PERCENTAGE) + 
 		   (n.cost_fixed/((double)  COST_SWAP)                * COST_PERCENTAGE);
 #else
     return n.cost_fixed;
@@ -90,7 +127,7 @@ double get_total_cost(const node& n) {
  * calculates the total lookahead cost of a node based on cost of the special opt 
  */
 double get_total_lookahead_cost(int const * const depths, int const * const workload, double const * const fidelities) {
-	return (get_maximal_depth(depths) / ((double) DEPTH_SWAP) * DEPTH_PERCENTAGE) + 
+	return ((get_maximal_depth(depths) - current_depth) / ((double) DEPTH_SWAP) * DEPTH_PERCENTAGE) + 
 	  	   (workload_cost(workload)                           * WORKLOAD_NORM)    + 
 		   (fidelity_cost(fidelities)                         * FIDELITY_NORM);
 }

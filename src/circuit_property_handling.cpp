@@ -35,7 +35,6 @@ circuit_properties create_circuit_properties() {
     return p;
 }
 
-int count = 0;
 void adapt_circuit_properties(circuit_properties& p, const node& n) {
 	delete_circuit_properties(p);
 	p.locations  = n.locations;
