@@ -1,5 +1,5 @@
 # A tool to map quantum circuits to the IBM QX architecture (developed in C++)
-Copyright (c) 2017 by Alwin Zulehner (alwin.zulehner@jku.at), Stefan Hillmich (stefan.hillmich@jku.at), Alexandru Paler (alexandru.paler@jku.at), and Robert Wille (robert.wille@jku.at)  
+Copyright (c) 2017 by Alwin Zulehner, Stefan Hillmich, Alexandru Paler, and Robert Wille  
 Johannes Kepler University Linz, Austria  
 http://www.jku.at/iic/eda/ibm_qx_mapping
 
@@ -8,7 +8,7 @@ The software is intellectual property of the above mentioned authors. You can fr
 Use at your own risk!
 In no event shall the authors be liable for any damages whatsoever (including without limitation damages for loss of business profits, business interruption, loss of business information, or any other pecuniary loss) arising from the use of or inability to use the software, even if the authors have been advised of the possibility of such damages.
 
-If you have any questions feel free to contact us using alwin.zulehner@jku.at, stefan.hillmich@jku.at, alexandru.paler@jku.at, and robert.wille@jku.at
+If you have any questions feel free to contact us using iic_quantum@jku.at
 
 ## Overview
 
