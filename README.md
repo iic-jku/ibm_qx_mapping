@@ -1,3 +1,6 @@
+---
+A new - more modern and flexible - implementation of this mapping methodology is available in our [JKQ quantum circuit mapping tool QMAP](https://github.com/iic-jku/qmap).
+---
 # A tool to map quantum circuits to the IBM QX architecture (developed in C++)
 Copyright (c) 2017 by Alwin Zulehner, Stefan Hillmich, Alexandru Paler, and Robert Wille  
 Johannes Kepler University Linz, Austria  
